@@ -27,4 +27,11 @@ vendor-bin/phpstan/vendor: vendor vendor-bin/phpstan/composer.json
 	composer bin phpstan update
 	touch $@
 
+psalm: vendor-bin/psalm/vendor
+	vendor/bin/psalm
+
+vendor-bin/psalm/vendor: vendor vendor-bin/psalm/composer.json
+	composer bin psalm update
+	touch $@
+
 .PHONY: test sass-spec rebuild-sass-spec rebuild-outputs standard phpstan phpstan-baseline

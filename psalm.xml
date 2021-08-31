@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="2"
+    resolveFromConfigFile="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+>
+    <projectFiles>
+        <directory name="src" />
+        <ignoreFiles>
+            <directory name="vendor" />
+            <file name="src/Block.php" />
+            <file name="src/Cache.php" />
+            <file name="src/Compiler.php" />
+            <file name="src/Compiler/Environment.php" />
+            <file name="src/Parser.php" />
+            <file name="src/Formatter.php" />
+            <file name="src/Node/Number.php" />
+            <file name="src/ValueConverter.php" />
+            <directory name="src/Block" />
+            <directory name="src/Formatter" />
+        </ignoreFiles>
+    </projectFiles>
+</psalm>
