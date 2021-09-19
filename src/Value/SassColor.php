@@ -198,7 +198,7 @@ final class SassColor extends Value
 
         $factor = 1 - $scaledWhiteness - $scaledBlackness;
 
-        $toRgb = function (float $hue) use ($factor, $scaledWhiteness) {
+        $toRgb = function (float $hue) use ($factor, $scaledWhiteness): int {
             $channel = self::hueToRgb(0, 1, $hue) * $factor + $scaledWhiteness;
 
             return NumberUtil::fuzzyRound($channel * 255);

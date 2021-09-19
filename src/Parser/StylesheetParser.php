@@ -1086,6 +1086,7 @@ abstract class StylesheetParser extends Parser
         $this->expectIdentifier('from');
         $this->whitespace();
 
+        /** @var bool|null $exclusive */
         $exclusive = null;
         $from = $this->expression(function () use (&$exclusive) {
             if (!$this->lookingAtIdentifier()) {
@@ -1747,6 +1748,7 @@ abstract class StylesheetParser extends Parser
          * naturally ordered from lowest to highest precedence.
          *
          * @phpstan-var list<BinaryOperator::*>|null $operators
+         * @psalm-var list<BinaryOperator::*>|null $operators
          */
         $operators = null;
         /**
@@ -1838,6 +1840,7 @@ abstract class StylesheetParser extends Parser
                     }
                 }
 
+                /** @var list<Expression> $spaceExpressions */
                 $spaceExpressions = $spaceExpressions ?? [];
                 $resolveOperations();
 
@@ -1860,7 +1863,9 @@ abstract class StylesheetParser extends Parser
 
                 $allowSlash = $allowSlash && $operator === BinaryOperator::DIVIDED_BY;
 
+                /** @psalm-var list<BinaryOperator::*> $operators */
                 $operators = $operators ?? [];
+                /** @var list<Expression> $operands */
                 $operands = $operands ?? [];
 
                 $precedence = BinaryOperator::getPrecedence($operator);

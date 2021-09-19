@@ -240,7 +240,7 @@ final class SassCalculation extends Value
             return $value;
         }
 
-        $args = array_filter([$min, $value, $max]);
+        $args = array_values(array_filter([$min, $value, $max]));
         self::verifyCompatibleNumbers($args);
         self::verifyLength($args, 3);
 

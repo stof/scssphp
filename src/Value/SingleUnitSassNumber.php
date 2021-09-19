@@ -266,8 +266,8 @@ final class SingleUnitSassNumber extends SassNumber
             break;
         }
 
+        $otherDenominators = array_values($otherDenominators);
         if ($removed) {
-            $otherDenominators = array_values($otherDenominators);
         } else {
             array_unshift($newNumerators, $this->unit);
         }
