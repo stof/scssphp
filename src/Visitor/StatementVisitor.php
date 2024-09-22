@@ -22,6 +22,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\EachRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ErrorRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ExtendRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ForRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\ForwardRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\FunctionRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\IfRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ImportRule;
@@ -34,6 +35,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\SilentComment;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\StyleRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\Stylesheet;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\SupportsRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\UseRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\VariableDeclaration;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WarnRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WhileRule;
@@ -100,6 +102,11 @@ interface StatementVisitor
     /**
      * @return T
      */
+    public function visitForwardRule(ForwardRule $node);
+
+    /**
+     * @return T
+     */
     public function visitFunctionRule(FunctionRule $node);
 
     /**
@@ -156,6 +163,11 @@ interface StatementVisitor
      * @return T
      */
     public function visitSupportsRule(SupportsRule $node);
+
+    /**
+     * @return T
+     */
+    public function visitUseRule(UseRule $node);
 
     /**
      * @return T

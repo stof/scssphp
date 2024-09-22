@@ -105,6 +105,30 @@ final class SpanUtil
     }
 
     /**
+     * Returns the span of the quoted text at the start of this span.
+     *
+     * This span must start with `"` or `'`.
+     */
+    public static function initialQuoted(FileSpan $span): FileSpan
+    {
+        $scanner = new StringScanner($span->getText());
+        $quote = $scanner->readChar();
+
+        while (true) {
+            $next = $scanner->readUtf8Char();
+            if ($next === $quote) {
+                break;
+            }
+
+            if ($next === '\\') {
+                $scanner->readUtf8Char();
+            }
+        }
+
+        return $span->subspan(0, $scanner->getPosition());
+    }
+
+    /**
      * Returns a subspan excluding an initial at-rule and any whitespace after
      * it.
      */

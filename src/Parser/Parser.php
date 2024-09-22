@@ -922,6 +922,26 @@ class Parser
     }
 
     /**
+     * Runs callback and, if it throws a {@see FormatException}, rethrows it
+     * with $message as its message.
+     *
+     * @template T
+     *
+     * @param callable(): T $callback
+     * @return T
+     *
+     * @param-immediately-invoked-callable $callback
+     */
+    protected function withErrorMessage(string $message, callable $callback)
+    {
+        try {
+            return $callback();
+        } catch (FormatException $e) {
+            throw new FormatException($message, $e->getSpan(), $e);
+        }
+    }
+
+    /**
      * Runs $callback and wraps any {@see FormatException} it throws in a
      * {@see SassFormatException}
      *

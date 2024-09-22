@@ -18,6 +18,7 @@ use League\Uri\Uri;
 use ScssPhp\ScssPhp\Ast\Sass\Argument;
 use ScssPhp\ScssPhp\Ast\Sass\ArgumentDeclaration;
 use ScssPhp\ScssPhp\Ast\Sass\ArgumentInvocation;
+use ScssPhp\ScssPhp\Ast\Sass\ConfiguredVariable;
 use ScssPhp\ScssPhp\Ast\Sass\Expression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\BinaryOperationExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\BinaryOperator;
@@ -53,6 +54,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\ElseClause;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ErrorRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ExtendRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ForRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\ForwardRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\FunctionRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\IfClause;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\IfRule;
@@ -65,6 +67,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\SilentComment;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\StyleRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\Stylesheet;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\SupportsRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\UseRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\VariableDeclaration;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WarnRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WhileRule;
@@ -81,6 +84,7 @@ use ScssPhp\ScssPhp\Exception\SassFormatException;
 use ScssPhp\ScssPhp\Logger\LoggerInterface;
 use ScssPhp\ScssPhp\Util;
 use ScssPhp\ScssPhp\Util\Character;
+use ScssPhp\ScssPhp\Util\ListUtil;
 use ScssPhp\ScssPhp\Util\LoggerUtil;
 use ScssPhp\ScssPhp\Util\Path;
 use ScssPhp\ScssPhp\Util\StringUtil;
@@ -331,11 +335,6 @@ abstract class StylesheetParser extends Parser
         }
 
         $this->expectStatementSeparator('variable declaration');
-
-        // TODO remove this when implementing modules
-        if ($namespace !== null) {
-            $this->error('Sass modules are not implemented yet.', $this->scanner->spanFrom($start));
-        }
 
         $declaration = new VariableDeclaration($name, $value, $this->scanner->spanFrom($start), $namespace, $guarded, $global, $precedingComment);
 
@@ -751,8 +750,7 @@ abstract class StylesheetParser extends Parser
                     $this->disallowedAtRule($start);
                 }
 
-                // TODO remove this when implementing modules
-                $this->error('Sass modules are not implemented yet.', $this->scanner->spanFrom($start));
+                return $this->forwardRule($start);
             case 'function':
                 return $this->functionRule($start);
             case 'if':
@@ -778,8 +776,7 @@ abstract class StylesheetParser extends Parser
                     $this->disallowedAtRule($start);
                 }
 
-                // TODO remove this when implementing modules
-                $this->error('Sass modules are not implemented yet.', $this->scanner->spanFrom($start));
+                return $this->useRule($start);
             case 'warn':
                 return $this->warnRule($start);
             case 'while':
@@ -834,11 +831,6 @@ abstract class StylesheetParser extends Parser
             try {
                 return $this->variableDeclarationWithNamespace();
             } catch (FormatException $variableDeclarationError) {
-                // TODO remove this when implementing modules
-                if ($variableDeclarationError->getMessage() === 'Sass modules are not implemented yet.') {
-                    throw $variableDeclarationError;
-                }
-
                 $this->scanner->setPosition($start);
 
                 // If a variable declaration failed to parse, it's possible the user
@@ -1165,6 +1157,87 @@ abstract class StylesheetParser extends Parser
     }
 
     /**
+     * Consumes a `@forward` rule.
+     *
+     * $start should point before the `@`.
+     */
+    private function forwardRule(int $start): ForwardRule
+    {
+        $url = $this->urlString();
+        $this->whitespace();
+
+        $prefix = null;
+        if ($this->scanIdentifier('as')) {
+            $this->whitespace();
+            $prefix = $this->identifier(normalize: true);
+            $this->scanner->expectChar('*');
+            $this->whitespace();
+        }
+
+        $shownMixinsAndFunctions = null;
+        $shownVariables = null;
+        $hiddenMixinsAndFunctions = null;
+        $hiddenVariables = null;
+        if ($this->scanIdentifier('show')) {
+            [$shownMixinsAndFunctions, $shownVariables] = $this->memberList();
+        } elseif ($this->scanIdentifier('hide')) {
+            [$hiddenMixinsAndFunctions, $hiddenVariables] = $this->memberList();
+        }
+
+        $configuration = $this->configuration(allowGuarded: true);
+        $this->whitespace();
+
+        $this->expectStatementSeparator('@forward rule');
+        $span = $this->scanner->spanFrom($start);
+        if (!$this->isUseAllowed) {
+            $this->error('@forward rules must be written before any other rules.', $span);
+        }
+
+        if ($shownMixinsAndFunctions !== null) {
+            \assert($shownVariables !== null);
+
+            return ForwardRule::show($url, $shownMixinsAndFunctions, $shownVariables, $span, $prefix, $configuration);
+        }
+
+        if ($hiddenMixinsAndFunctions !== null) {
+            \assert($hiddenVariables !== null);
+
+            return ForwardRule::hide($url, $hiddenMixinsAndFunctions, $hiddenVariables, $span, $prefix, $configuration);
+        }
+
+        return ForwardRule::create($url, $span, $prefix, $configuration);
+    }
+
+    /**
+     * Consumes a list of members that may contain either plain identifiers or
+     * variable names.
+     *
+     * The plain identifiers are returned in the first set, and the variable
+     * names in the second.
+     *
+     * @return array{list<string>, list<string>}
+     */
+    private function memberList(): array
+    {
+        $identifiers = [];
+        $variables = [];
+
+        do {
+            $this->whitespace();
+            $this->withErrorMessage('Expected variable, mixin, or function name', function () use (&$identifiers, &$variables) {
+                if ($this->scanner->peekChar() === '$') {
+                    $variables[] = $this->variableName();
+                } else {
+                    $identifiers[] = $this->identifier(normalize: true);
+                }
+            });
+            $this->whitespace();
+        } while ($this->scanner->scanChar(','));
+
+        return [$identifiers, $variables];
+    }
+
+    /**
      * Consumes a `@if` rule.
      *
      * $start should point before the `@`. $child is called to consume any
@@ -1476,11 +1549,6 @@ abstract class StylesheetParser extends Parser
 
         $span = $this->scanner->spanFrom($start, $start)->expand(($content ?? $arguments)->getSpan());
 
-        // TODO remove this when implementing modules
-        if ($namespace !== null) {
-            $this->error('Sass modules are not implemented yet.', $this->scanner->spanFrom($start));
-        }
-
         return new IncludeRule($name, $arguments, $span, $namespace, $content);
     }
 
@@ -1650,6 +1718,122 @@ abstract class StylesheetParser extends Parser
         $this->whitespace();
 
         return $this->withChildren($this->statement(...), $start, fn(array $children, FileSpan $span) => new SupportsRule($condition, $children, $span));
+    }
+
+    /**
+     * Consumes a `@use` rule.
+     *
+     * $start should point before the `@`.
+     */
+    private function useRule(int $start): UseRule
+    {
+        $url = $this->urlString();
+        $this->whitespace();
+
+        $namespace = $this->useNamespace($url, $start);
+        $this->whitespace();
+        $configuration = $this->configuration();
+        $this->whitespace();
+
+        $span = $this->scanner->spanFrom($start);
+        if (!$this->isUseAllowed) {
+            $this->error('@use rules must be written before any other rules.', $span);
+        }
+        $this->expectStatementSeparator('@use rule');
+
+        return new UseRule($url, $namespace, $span, $configuration);
+    }
+
+    /**
+     * Parses the namespace of a `@use` rule from an `as` clause, or returns the
+     * default namespace from its URL.
+     *
+     * Returns `null` to indicate a `@use` rule without a URL.
+     */
+    private function useNamespace(UriInterface $url, int $start): ?string
+    {
+        if ($this->scanIdentifier('as')) {
+            $this->whitespace();
+
+            return $this->scanner->scanChar('*') ? null : $this->identifier();
+        }
+
+        $pathSegments = explode('/', $url->getPath());
+        $basename = ListUtil::last($pathSegments);
+        $dot = strpos($basename, '.');
+
+        $namespace = substr($basename, str_starts_with($basename, '_') ? 1 : 0, $dot === false ? null : $dot);
+
+        try {
+            return Parser::parseIdentifier($namespace, $this->logger);
+        } catch (SassFormatException) {
+            $this->error("The default namespace \"$namespace\" is not a valid Sass identifier.\n\nRecommendation: add an \"as\" clause to define an explicit namespace.", $this->scanner->spanFrom($start));
+        }
+    }
+
+    /**
+     * Returns the list of configured variables from a `@use` or `@forward`
+     * rule's `with` clause.
+     *
+     * If `$allowGuarded` is `true`, this will allow configured variable with the
+     * `!default` flag.
+     *
+     * Returns `null` if there is no `with` clause.
+     *
+     * @return list<ConfiguredVariable>|null
+     */
+    private function configuration(bool $allowGuarded = false): ?array
+    {
+        if (!$this->scanIdentifier('with')) {
+            return null;
+        }
+
+        $variableNames = [];
+        $configuration = [];
+        $this->whitespace();
+        $this->scanner->expectChar('(');
+
+        while (true) {
+            $this->whitespace();
+
+            $variableStart = $this->scanner->getPosition();
+            $name = $this->variableName();
+            $this->whitespace();
+            $this->scanner->expectChar(':');
+            $this->whitespace();
+            $expression = $this->expressionUntilComma();
+
+            $guarded = false;
+            $flagStart = $this->scanner->getPosition();
+            if ($allowGuarded && $this->scanner->scanChar('!')) {
+                if ($this->identifier() === 'default') {
+                    $guarded = true;
+                    $this->whitespace();
+                } else {
+                    $this->error('Invalid flag name.', $this->scanner->spanFrom($flagStart));
+                }
+            }
+
+            $span = $this->scanner->spanFrom($variableStart);
+            if (\in_array($name, $variableNames, true)) {
+                $this->error('The same variable may only be configured once.', $span);
+            }
+            $variableNames[] = $name;
+            $configuration[] = new ConfiguredVariable($name, $expression, $span, $guarded);
+
+            if (!$this->scanner->scanChar(',')) {
+                break;
+            }
+
+            $this->whitespace();
+            if (!$this->lookingAtExpression()) {
+                break;
+            }
+        }
+
+        $this->scanner->expectChar(')');
+
+        return $configuration;
     }
 
     /**
@@ -3134,15 +3318,10 @@ WARNING;
             $name = $this->variableName();
             $this->assertPublic($name, fn() => $this->scanner->spanFrom($start));
 
-            // TODO remove this when implementing modules
-            $this->error('Sass modules are not implemented yet.', $this->scanner->spanFrom($start));
-            // return new VariableExpression($name, $this->scanner->spanFrom($start), $plain);
+            return new VariableExpression($name, $this->scanner->spanFrom($start), $namespace);
         }
 
-        // TODO remove this when implementing modules
-        $this->publicIdentifier();
-        $this->error('Sass modules are not implemented yet.', $this->scanner->spanFrom($start));
-        // return new FunctionExpression($this->publicIdentifier(), $this->argumentInvocation(), $this->scanner->spanFrom($start), $plain);
+        return new FunctionExpression($this->publicIdentifier(), $this->argumentInvocation(), $this->scanner->spanFrom($start), $namespace);
     }
 
     /**
@@ -4222,6 +4401,21 @@ WARNING;
         $this->whitespaceWithoutComments();
 
         return $result;
+    }
+
+    /**
+     * Consumes a string that contains a valid URL.
+     */
+    private function urlString(): UriInterface
+    {
+        $start = $this->scanner->getPosition();
+        $url = $this->string();
+
+        try {
+            return Uri::new($url);
+        } catch (SyntaxError $e) {
+            $this->error("Invalid URL: {$e->getMessage()}.", $this->scanner->spanFrom($start), $e);
+        }
     }
 
     /**

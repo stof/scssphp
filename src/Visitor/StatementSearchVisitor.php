@@ -24,6 +24,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\EachRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ErrorRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ExtendRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ForRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\ForwardRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\FunctionRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\IfClause;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\IfRule;
@@ -38,6 +39,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\SilentComment;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\StyleRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\Stylesheet;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\SupportsRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\UseRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\VariableDeclaration;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WarnRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WhileRule;
@@ -115,6 +117,11 @@ abstract class StatementSearchVisitor implements StatementVisitor
         return $this->visitChildren($node->getChildren());
     }
 
+    public function visitForwardRule(ForwardRule $node)
+    {
+        return null;
+    }
+
     public function visitFunctionRule(FunctionRule $node)
     {
         return $this->visitCallableDeclaration($node);
@@ -183,6 +190,11 @@ abstract class StatementSearchVisitor implements StatementVisitor
     public function visitSupportsRule(SupportsRule $node)
     {
         return $this->visitChildren($node->getChildren());
+    }
+
+    public function visitUseRule(UseRule $node)
+    {
+        return null;
     }
 
     public function visitVariableDeclaration(VariableDeclaration $node)

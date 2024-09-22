@@ -75,6 +75,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\EachRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ErrorRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ExtendRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ForRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\ForwardRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\FunctionRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\IfRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\ImportRule;
@@ -87,6 +88,7 @@ use ScssPhp\ScssPhp\Ast\Sass\Statement\SilentComment;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\StyleRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\Stylesheet;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\SupportsRule;
+use ScssPhp\ScssPhp\Ast\Sass\Statement\UseRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\VariableDeclaration;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WarnRule;
 use ScssPhp\ScssPhp\Ast\Sass\Statement\WhileRule;
@@ -1262,6 +1264,12 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
         }, true, true);
     }
 
+    public function visitForwardRule(ForwardRule $node): ?Value
+    {
+        // TODO: implement the evaluation of modules.
+        throw $this->exception('Sass modules are not implemented yet.', $node->getSpan());
+    }
+
     public function visitFunctionRule(FunctionRule $node): ?Value
     {
         $this->environment->setFunction(new UserDefinedCallable($node, $this->environment->closure(), $this->inDependency));
@@ -1884,6 +1892,12 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
         });
 
         return null;
+    }
+
+    public function visitUseRule(UseRule $node): ?Value
+    {
+        // TODO: implement the evaluation of modules.
+        throw $this->exception('Sass modules are not implemented yet.', $node->getSpan());
     }
 
     public function visitWarnRule(WarnRule $node): ?Value

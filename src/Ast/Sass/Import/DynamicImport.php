@@ -16,6 +16,7 @@ use League\Uri\Contracts\UriInterface;
 use League\Uri\Uri;
 use ScssPhp\ScssPhp\Ast\Sass\Expression\StringExpression;
 use ScssPhp\ScssPhp\Ast\Sass\Import;
+use ScssPhp\ScssPhp\Ast\Sass\SassDependency;
 use SourceSpan\FileSpan;
 
 /**
@@ -23,7 +24,7 @@ use SourceSpan\FileSpan;
  *
  * @internal
  */
-final class DynamicImport implements Import
+final class DynamicImport implements Import, SassDependency
 {
     /**
      * The URI of the file to import.
@@ -51,6 +52,11 @@ final class DynamicImport implements Import
     }
 
     public function getSpan(): FileSpan
+    {
+        return $this->span;
+    }
+
+    public function getUrlSpan(): FileSpan
     {
         return $this->span;
     }
