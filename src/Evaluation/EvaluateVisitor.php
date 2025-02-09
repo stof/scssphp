@@ -12,6 +12,7 @@
 
 namespace ScssPhp\ScssPhp\Evaluation;
 
+use League\Uri\Contracts\UriInterface;
 use League\Uri\Uri;
 use ScssPhp\ScssPhp\Ast\AstNode;
 use ScssPhp\ScssPhp\Ast\Css\CssAtRule;
@@ -103,6 +104,7 @@ use ScssPhp\ScssPhp\Ast\Selector\SelectorList;
 use ScssPhp\ScssPhp\Ast\Selector\SimpleSelector;
 use ScssPhp\ScssPhp\Collection\Map;
 use ScssPhp\ScssPhp\Colors;
+use ScssPhp\ScssPhp\Configuration;
 use ScssPhp\ScssPhp\Deprecation;
 use ScssPhp\ScssPhp\Exception\MultiSpanSassRuntimeException;
 use ScssPhp\ScssPhp\Exception\SassException;
@@ -368,6 +370,13 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
     private ?ExtensionStore $extensionStore = null;
 
     /**
+     * The configuration for the current module.
+     *
+     * If this is empty, that indicates that the current module is not configured.
+     */
+    private Configuration $configuration;
+
+    /**
      * @param SassCallable[] $functions
      */
     public function __construct(ImportCache $importCache, array $functions, LoggerInterface $logger, bool $quietDeps = false, bool $sourceMap = false)
@@ -377,6 +386,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
         $this->quietDeps = $quietDeps;
         $this->sourceMap = $sourceMap;
         $this->environment = Environment::create();
+        $this->configuration = Configuration::empty();
 
         $sassMetaUri = Uri::new('sass:meta');
         // These functions are defined in the context of the evaluator because
@@ -387,12 +397,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
                 $variable = $arguments[0]->assertString('name');
                 $module = $arguments[1]->realNull()?->assertString('module');
 
-                if ($module !== null) {
-                    // TODO remove this when implementing modules
-                    throw new SassScriptException('Sass modules are not implemented yet.');
-                }
-
-                return SassBoolean::create($this->environment->globalVariableExists(str_replace('_', '-', $variable->getText())));
+                return SassBoolean::create($this->environment->globalVariableExists(str_replace('_', '-', $variable->getText()), $module?->getText()));
             }, $sassMetaUri),
             BuiltInCallable::function('variable-exists', '$name', function ($arguments) {
                 $variable = $arguments[0]->assertString('name');
@@ -403,23 +408,13 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
                 $variable = $arguments[0]->assertString('name');
                 $module = $arguments[1]->realNull()?->assertString('module');
 
-                if ($module !== null) {
-                    // TODO remove this when implementing modules
-                    throw new SassScriptException('Sass modules are not implemented yet.');
-                }
-
-                return SassBoolean::create($this->environment->functionExists(str_replace('_', '-', $variable->getText())) || isset($this->builtInFunctions[$variable->getText()]) || FunctionRegistry::has($variable->getText()));
+                return SassBoolean::create($this->environment->functionExists(str_replace('_', '-', $variable->getText()), $module?->getText()) || isset($this->builtInFunctions[$variable->getText()]) || FunctionRegistry::has($variable->getText()));
             }, $sassMetaUri),
             BuiltInCallable::function('mixin-exists', '$name, $module: null', function ($arguments) {
                 $variable = $arguments[0]->assertString('name');
                 $module = $arguments[1]->realNull()?->assertString('module');
 
-                if ($module !== null) {
-                    // TODO remove this when implementing modules
-                    throw new SassScriptException('Sass modules are not implemented yet.');
-                }
-
-                return SassBoolean::create($this->environment->mixinExists(str_replace('_', '-', $variable->getText())));
+                return SassBoolean::create($this->environment->mixinExists(str_replace('_', '-', $variable->getText()), $module?->getText()));
             }, $sassMetaUri),
             BuiltInCallable::function('content-exists', '', function ($arguments) {
                 if (! $this->environment->isInMixin()) {
@@ -428,6 +423,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
 
                 return SassBoolean::create($this->environment->getContent() !== null);
             }, $sassMetaUri),
+            // TODO add functions introspecting modules
             BuiltInCallable::function('get-function', '$name, $css: false, $module: null', function ($arguments) {
                 $name = $arguments[0]->assertString('name');
                 $css = $arguments[1]->isTruthy();
@@ -446,14 +442,9 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
                     $normalizedName = str_replace('_', '-', $name->getText());
                     $namespace = $module?->getText();
 
-                    if ($namespace !== null) {
-                        // TODO remove this when implementing modules
-                        throw new SassScriptException('Sass modules are not implemented yet.');
-                    }
+                    $local = $this->environment->getFunction($normalizedName, $namespace);
 
-                    $local = $this->environment->getFunction($normalizedName);
-
-                    if ($local !== null) {
+                    if ($local !== null || $namespace !== null) {
                         return $local;
                     }
 
@@ -472,12 +463,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
 
                 \assert($this->callableNode !== null);
                 $callable = $this->addExceptionSpan($this->callableNode, function () use ($name, $module) {
-                    if ($module !== null) {
-                        // TODO remove this when implementing modules
-                        throw new SassScriptException('Sass modules are not implemented yet.');
-                    }
-
-                    return $this->environment->getMixin(str_replace('_', '-', $name->getText()));
+                    return $this->environment->getMixin(str_replace('_', '-', $name->getText()), $module?->getText());
                 });
 
                 if ($callable === null) {
@@ -631,12 +617,17 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
         });
     }
 
+    private function loadModule(UriInterface $url, string $stackFrame, AstNode $nodeWithSpan, callable $callback, ?UriInterface $baseUrl = null, ?Configuration $configuration = null, bool $nameInErrors = false): void
+    {
+
+    }
+
     /**
      * @param array<string, Value> $initialVariables
      *
      * @return array{CssStylesheet, ExtensionStore}
      */
-    private function execute(?Importer $importer, Stylesheet $stylesheet, array $initialVariables = []): array
+    private function execute(?Importer $importer, Stylesheet $stylesheet, array $initialVariables = [], ?Configuration $configuration = null): array
     {
         $environment = Environment::create();
         foreach ($initialVariables as $variableName => $initialVariable) {
@@ -647,7 +638,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
 
         $extensionStore = ConcreteExtensionStore::create();
 
-        $this->withEnvironment($environment, function () use ($importer, $stylesheet, $extensionStore, &$css) {
+        $this->withEnvironment($environment, function () use ($importer, $stylesheet, $configuration, $extensionStore, &$css) {
             $oldImporter = $this->importer;
             $oldStylesheet = $this->stylesheet;
             $oldRoot = $this->root;
@@ -661,6 +652,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
             $oldInUnknownAtRule = $this->inUnknownAtRule;
             $oldAtRootExcludingStyleRule = $this->atRootExcludingStyleRule;
             $oldInKeyframes = $this->inKeyFrames;
+            $oldConfiguration = $this->configuration;
 
             $this->importer = $importer;
             $this->stylesheet = $stylesheet;
@@ -675,6 +667,9 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
             $this->inUnknownAtRule = false;
             $this->atRootExcludingStyleRule = false;
             $this->inKeyFrames = false;
+            if ($configuration !== null) {
+                $this->configuration = $configuration;
+            }
 
             $this->visitStylesheet($stylesheet);
             $css = $this->outOfOrderImports === null ? $root : new ModifiableCssStylesheet($stylesheet->getSpan(), $this->addOutOfOrderImports());
@@ -692,8 +687,10 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
             $this->inUnknownAtRule = $oldInUnknownAtRule;
             $this->atRootExcludingStyleRule = $oldAtRootExcludingStyleRule;
             $this->inKeyFrames = $oldInKeyframes;
+            $this->configuration = $oldConfiguration;
         });
 
+        // TODO return a module
         assert($css instanceof CssStylesheet);
 
         return [$css, $extensionStore];
@@ -1352,6 +1349,8 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
             if ($url !== null) {
                 unset($this->activeModules[(string) $url]);
             }
+
+            // TODO handle modules
         });
     }
 
@@ -1471,7 +1470,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
     public function visitIncludeRule(IncludeRule $node): ?Value
     {
         $mixin = $this->addExceptionSpan($node, function () use ($node) {
-            return $this->environment->getMixin($node->getName());
+            return $this->environment->getMixin($node->getName(), $node->getNamespace());
         });
 
         if (str_starts_with($node->getOriginalName(), '--') && $mixin instanceof UserDefinedCallable && !str_starts_with($mixin->getDeclaration()->getOriginalName(), '--')) {
@@ -1867,8 +1866,20 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
     public function visitVariableDeclaration(VariableDeclaration $node): ?Value
     {
         if ($node->isGuarded()) {
+            if ($node->getNamespace() === null && $this->environment->atRoot()) {
+                $override = $this->configuration->remove($node->getName());
+
+                if ($override !== null && $override->value !== SassNull::create()) {
+                    $this->addExceptionSpan($node, function () use ($node, $override) {
+                        $this->environment->setVariable($node->getName(), $override->value, $override->assignmentNode, global: true);
+                    });
+
+                    return null;
+                }
+            }
+
             $value = $this->addExceptionSpan($node, function () use ($node) {
-                return $this->environment->getVariable($node->getName());
+                return $this->environment->getVariable($node->getName(), $node->getNamespace());
             });
 
             if ($value !== null && $value !== SassNull::create()) {
@@ -1888,7 +1899,7 @@ class EvaluateVisitor implements StatementVisitor, ExpressionVisitor
 
         $value = $this->withoutSlash($node->getExpression()->accept($this), $node->getExpression());
         $this->addExceptionSpan($node, function () use ($value, $node) {
-            $this->environment->setVariable($node->getName(), $value, $this->expressionNode($node->getExpression()), $node->isGlobal());
+            $this->environment->setVariable($node->getName(), $value, $this->expressionNode($node->getExpression()), $node->isGlobal(), $node->getNamespace());
         });
 
         return null;
@@ -2033,7 +2044,7 @@ WARNING;
     public function visitVariableExpression(VariableExpression $node): Value
     {
         $result = $this->addExceptionSpan($node, function () use ($node) {
-            return $this->environment->getVariable($node->getName());
+            return $this->environment->getVariable($node->getName(), $node->getNamespace());
         });
 
         if ($result !== null) {
@@ -2149,7 +2160,7 @@ WARNING;
     public function visitFunctionExpression(FunctionExpression $node): Value
     {
         $function = $this->getStylesheet()->isPlainCss() ? null : $this->addExceptionSpan($node, function () use ($node) {
-            return $this->environment->getFunction($node->getName());
+            return $this->environment->getFunction($node->getName(), $node->getNamespace());
         });
 
         if ($function === null) {
@@ -3233,7 +3244,7 @@ WARNING;
     {
         if ($expression instanceof VariableExpression) {
             return $this->addExceptionSpan($expression, function () use ($expression) {
-                return $this->environment->getVariableNode($expression->getName()) ?? $expression;
+                return $this->environment->getVariableNode($expression->getName(), $expression->getNamespace()) ?? $expression;
             });
         }
 
